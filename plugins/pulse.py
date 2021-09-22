@@ -174,8 +174,9 @@ class PhysicalMixer:
             areas = self.Area.ALL
 
         if areas & self.Area.BALANCE:
+            blink = 1 if fader.volume_desync else 0 # adds 1 to the button state, which will cause the button to blink
             if fader.channels != 2:
-                self.apc_proxy.set_button(APCMini.MATRIX_OFFSET+fader.index, ButtonState.GREEN)
+                self.apc_proxy.set_button(APCMini.MATRIX_OFFSET+fader.index, ButtonState.GREEN+blink)
             else:
                 bal = fader.balance
                 if bal == Balance.CENTER:
@@ -184,7 +185,6 @@ class PhysicalMixer:
                     colors = [ButtonState.GREEN, ButtonState.YELLOW if abs(bal) == 1 else ButtonState.RED]
                     if bal < 0:
                         colors = reversed(colors)
-                blink = 1 if fader.volume_desync else 0 # adds 1 to the button state, which will cause the button to blink
                 for i,c in enumerate(colors):
                         self.apc_proxy.set_button(APCMini.MATRIX_OFFSET+fader.index+8*i, c+blink)
 
@@ -458,15 +458,14 @@ class EventLoop(threading.Thread):
         fader = self.fader_pool.at(fader_index)
         if fader is None: # physical fader not mapped
             return
-        if fader.volume_desync:
-            self.update_volume(fader_index) # re-sync
-        else:
-            self.change_balance(fader, direction)
+        # upper button only allowed for stereo streams
+        if not direction or fader.channels == 2:
+            if fader.volume_desync:
+                    self.update_volume(fader_index) # re-sync
+            else:
+                self.change_balance(fader, direction)
 
     def change_balance(self, fader: Fader, direction: bool) -> None:
-        if fader.channels != 2: # balance only for stereo streams
-            return
-            
         bal = fader.balance
         if direction:
             if bal == Balance.FULL_RIGHT:
