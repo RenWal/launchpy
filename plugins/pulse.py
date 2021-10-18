@@ -227,7 +227,7 @@ class PhysicalMixer:
                 self.apc_proxy.set_button(APCMini.MATRIX_OFFSET+btn.ordinal, ButtonState.RED)
         elif btn.area == ButtonArea.HORIZONTAL:
             if self.remap_source is None:
-                self.remap_source = btn.ordinal
+                self.remap_source = btn
             else:
                 self._submit(self.MixerEvent(self.MixerEventType.FADER_REMAP, btn.ordinal, value=self.remap_source.ordinal))
                 self.ignore_release.add(btn)
