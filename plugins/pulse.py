@@ -229,10 +229,9 @@ class PhysicalMixer:
             if self.remap_source is None:
                 self.remap_source = btn.ordinal
             else:
-                remap_target = btn.ordinal
-                self._submit(self.MixerEvent(self.MixerEventType.FADER_REMAP, remap_target, value=self.remap_source))
+                self._submit(self.MixerEvent(self.MixerEventType.FADER_REMAP, btn.ordinal, value=self.remap_source.ordinal))
                 self.ignore_release.add(btn)
-                self.ignore_release.add((btn.area, self.remap_source))
+                self.ignore_release.add(self.remap_source)
                 self.remap_source = None
     
     def on_btn_release(self, btn):
@@ -249,7 +248,7 @@ class PhysicalMixer:
                     return
                 self._submit(self.MixerEvent(self.MixerEventType.FADER_SINK, col, value=sink))
         elif btn.area == ButtonArea.HORIZONTAL:
-            if self.remap_source == btn.ordinal:
+            if self.remap_source == btn:
                 self.remap_source = None
             if btn in self.ignore_release:
                 self.ignore_release.remove(btn)
