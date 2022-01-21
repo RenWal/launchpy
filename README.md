@@ -64,3 +64,7 @@ I found myself stuck at home and figured that my home office setup just hasn't g
 Here's a chart of the button mapping:
 https://github.com/TomasHubelbauer/akai-apc-mini
 This person used raw USB messages to interact with the APC mini, which I think is not necessary since the device speaks mostly standard MIDI, and Python can handle that pretty well. However, the button mapping is still correct and helped me develop this a lot.
+
+---
+
+This software is licensed under the [GNU General Public License, Version 3](./LICENSE).
