@@ -192,6 +192,7 @@ class PhysicalMixer:
             blink = 1 if fader.volume_desync else 0 # adds 1 to the button state, which will cause the button to blink
             if fader.channels != 2:
                 self.apc_proxy.set_button(APCMini.MATRIX_OFFSET+fader.index, ButtonState.GREEN+blink)
+                self.apc_proxy.set_button(APCMini.MATRIX_OFFSET+fader.index+8, ButtonState.OFF)
             else:
                 bal = fader.balance
                 if bal == Balance.CENTER:
