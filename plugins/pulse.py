@@ -18,13 +18,15 @@ from __future__ import annotations
 import threading
 import traceback
 from enum import Enum, IntEnum, IntFlag, auto
+from operator import neg
 from queue import SimpleQueue
 from time import time
 
 import pulsectl
 from apc import APCMini, ButtonArea, ButtonID, ButtonState
-from multiplexer import APCMiniProxy, AbstractAPCPlugin
-from sortedcontainers import SortedSet
+from multiplexer import AbstractAPCPlugin, APCMiniProxy
+from pulsectl.pulsectl import PulseIndexError
+from sortedcontainers import SortedDict, SortedSet
 
 
 class Balance(IntEnum):
@@ -56,14 +58,29 @@ class Fader:
 # One can extend PhysicalMixer to make this fader do something useful, like
 # controlling your microphone volume.
 class FaderPool:
+
+    class AllocMode(Enum):
+        # keep adding faders at the end of the deck, only fill gaps
+        # when no space at the end
+        APPEND = auto()
+        # insert fader at first free position at the beginning
+        FILL = auto()
+
+        # note that "beginning" = right and "end" = left unless you set
+        # sort_reverse below
+
     def __init__(self) -> None:
-        # this will assign the faders right-to left (useful if you have the APC to the
+        # "False" will assign the faders right-to left (useful if you have the APC to the
         # left of your keyboard)
-        self.free = SortedSet(range(APCMini.N_FADERS-1)) # don't use the master fader
+        self.sort_reverse = False
+        self.alloc_mode = self.AllocMode.FILL
         
-        # use this instead (and add "from operator import neg" to your imports)
-        # if you want the faders to be assigned left-to-right
-        #self.free = SortedSet(range(APCMini.N_FADERS-1), key=neg)
+        if self.sort_reverse:
+            self.free = SortedSet(range(APCMini.N_FADERS-1), key=neg)
+            self.used = SortedDict(neg)
+        else:
+            self.free = SortedSet(range(APCMini.N_FADERS-1)) # don't use the master fader
+            self.used = SortedDict()
         
         self.last_released = (None, 0)
         self.used = dict()
@@ -86,12 +103,33 @@ class FaderPool:
                 self.free.remove(free_index)
                 self.last_released = (None, 0)
         if free_index is None:
-            free_index = self.free.pop()
+            free_index = self._get_next_free()
+        if free_index is None:
+            return None
 
         fader = Fader(free_index, stream_index, sink, sink_id, channels, muted=muted)
         self.used[free_index] = fader
         self.stream_map[stream_index] = fader
         return fader
+
+    def _get_next_free(self):
+        if self.alloc_mode == self.AllocMode.APPEND:
+            step = 1 if self.sort_reverse else -1
+            for i in self.used:
+                print(i)
+                next_index = i+step
+                if next_index in self.free:
+                    print("hit")
+                    break
+            else:
+                next_index = 0 if self.sort_reverse else (APCMini.N_FADERS-2)
+            self.free.remove(next_index)
+            return next_index
+        elif self.alloc_mode == self.AllocMode.FILL:
+            return self.free.pop()
+
+        # you can override this to design custom fader selection logic
+        return None
 
     def for_stream(self, stream_index: int) -> Fader:
         return self.stream_map.get(stream_index)
