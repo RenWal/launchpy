@@ -249,7 +249,7 @@ class PhysicalMixer:
                 self.ignore_release.add(btn)
                 self.ignore_release.add(self.remap_source)
                 self.remap_source = None
-    
+
     def on_btn_release(self, btn):
         if btn.area == ButtonArea.MATRIX:
             (row, col) = divmod(btn.ordinal, 8)
@@ -336,8 +336,14 @@ class EventLoop(threading.Thread):
         return pulsectl.PulseVolumeInfo(vals, 1)
 
     def reload_sink_mute(self, sink_id: int) -> None:
-        pulse_sink = self.pulse.sink_info(sink_id)
-        sink_index = self.sinks.index(sink_id)
+        try:
+            pulse_sink = self.pulse.sink_info(sink_id)
+        except PulseIndexError:
+            return
+        try:
+            sink_index = self.sinks.index(sink_id)
+        except ValueError:
+            return # we're not displaying that sink
         self.sinks_muted[sink_index] = pulse_sink.mute
         self.physical_mixer.set_sinks(self.sinks_muted)
         for fader in self.fader_pool.get_used_faders():
@@ -376,7 +382,10 @@ class EventLoop(threading.Thread):
         fader.volume = volume
         # force Pulse's stream volume to match the physical fader's position
         pulse_volume = self._make_volume_object(fader)
-        self.pulse.sink_input_volume_set(stream_index, pulse_volume)
+        try:
+            self.pulse.sink_input_volume_set(stream_index, pulse_volume)
+        except pulsectl.PulseOperationFailed:
+            pass
 
     # reflect a change made using the software mixer to the hardware
     # (e.g., when you mute a stream using pavucontrol, the mute button
@@ -436,7 +445,10 @@ class EventLoop(threading.Thread):
         if fader is None: # physical fader not mapped
             return
         fader.muted = not fader.muted
-        self.pulse.sink_input_mute(fader.stream, fader.muted)
+        try:
+            self.pulse.sink_input_mute(fader.stream, fader.muted)
+        except pulsectl.PulseOperationFailed:
+            pass
         self.physical_mixer.sync_buttons(fader, areas=self.physical_mixer.Area.MUTE)
 
     def remap_faders(self, target: int, source: int) -> None:
@@ -466,7 +478,10 @@ class EventLoop(threading.Thread):
         fader.sink = sink_index
         sink = self.sinks[sink_index]
         fader.sink_id = sink
-        self.pulse.sink_input_move(fader.stream, sink)
+        try:
+            self.pulse.sink_input_move(fader.stream, sink)
+        except pulsectl.PulseOperationFailed:
+            return
         self.physical_mixer.sync_buttons(fader, self.physical_mixer.Area.SINK)
 
     def sub_handle_balance(self, fader_index: int, direction: bool) -> None:
@@ -495,7 +510,10 @@ class EventLoop(threading.Thread):
         fader.balance = bal
 
         pulse_volume = self._make_volume_object(fader)
-        self.pulse.sink_input_volume_set(fader.stream, pulse_volume)
+        try:
+            self.pulse.sink_input_volume_set(fader.stream, pulse_volume)
+        except pulsectl.PulseOperationFailed:
+            return
         self.physical_mixer.sync_buttons(fader, areas=self.physical_mixer.Area.BALANCE)
 
     # TODO deduplicate with release_fader
