@@ -19,6 +19,8 @@ from multiplexer import APCMiniProxy, AbstractAPCPlugin
 
 
 class GnomeWorkspacePlugin(AbstractAPCPlugin):
+    areas = ButtonArea.VERTICAL
+
     def __init__(self, name: str):
         super().__init__(name)
 
@@ -32,7 +34,6 @@ class GnomeWorkspacePlugin(AbstractAPCPlugin):
         super().on_register(apc_proxy)
         self.init_dbus()
         self.prev_workspace = None
-        print("Reg done")
     
     def on_unregister(self):
         return super().on_unregister()

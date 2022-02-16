@@ -90,10 +90,12 @@ class APCMiniProxy:
         return (self.enabled_areas & area) == area
 
 class AbstractAPCPlugin:
+    areas: ButtonArea = 0
+
     def __init__(self, name: str) -> None:
         self.name = name
     
-    def __repr__(self) -> None:
+    def __repr__(self) -> str:
         return self.name
 
     # convenience method
@@ -172,6 +174,11 @@ class APCMultiplexer:
         apc.enable_events()
 
     def register(self, areas: ButtonArea, plugin: AbstractAPCPlugin) -> None:
+        superfluous_areas = areas & ~(plugin.areas)
+        if superfluous_areas:
+            names = ' '.join([a.name for a in ButtonArea.split_flags(superfluous_areas)])
+            print(f"WARNING: Asked for areas {names} which are not provided by plugin {plugin.name}")
+
         with self.plugin_lock:
             self._create_plugin_data(plugin, areas)
             proxy = self.plugin_proxies[plugin]
@@ -180,6 +187,7 @@ class APCMultiplexer:
                 if len(self.area_plugins[area]) == 1:
                     proxy.enable_areas(area)
                     plugin.on_activate(area)
+
         area_names = ' '.join([a.name for a in ButtonArea.split_flags(areas)])
         print(f"Registered {plugin.name} on areas {area_names}")
 

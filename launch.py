@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 # launchpy, a Python binding and plugins for the Akai APC mini launchpad
 # Copyright (C) 2022 RenWal
 # 
@@ -15,40 +17,58 @@
 
 from __future__ import annotations
 
+import importlib
 from time import sleep
 
 import mido
 
-from apc import APCMini, ButtonArea
-from multiplexer import APCMultiplexer
-from plugins.demo import DemoPlugin
-from plugins.gnome import GnomeWorkspacePlugin
-from plugins.pulse import PulsePlugin
+import settings
+from apc import APCMini
+from multiplexer import APCMultiplexer, AbstractAPCPlugin
 
-APC_PORT = "APC MINI:APC MINI MIDI 1 20:0"
+class LaunchPy:
 
-PLUGIN_REGISTRY = [
-    (PulsePlugin, "Pulse mixer", ButtonArea.MATRIX | ButtonArea.HORIZONTAL),
-    (GnomeWorkspacePlugin, "Gnome workspace switcher", ButtonArea.VERTICAL)
-]
+    def __init__(self, settings: settings) -> None:
+        self.settings = settings
+        self.port = self.settings.APC_PORT or self.autodiscover_port()
 
-def wait_keyboard_interrupt():
-    try:
-        while 1:
-            sleep(1)
-    except KeyboardInterrupt:
-        pass
+    @staticmethod
+    def wait_keyboard_interrupt() -> None:
+        try:
+            while 1:
+                sleep(1)
+        except KeyboardInterrupt:
+            pass
 
-def run_plugins():
-    with mido.open_ioport(APC_PORT) as midiport:
-        apc = APCMini(midiport)
-        mult = APCMultiplexer(apc)
-        for clazz, name, areas in PLUGIN_REGISTRY:
-            plugin = clazz(name)
-            mult.register(areas, plugin)
-        wait_keyboard_interrupt()
-        mult.shutdown()
-        apc.reset()
+    @staticmethod
+    def autodiscover_port() -> str:
+        ports = mido.get_output_names()
+        try:
+            return next(p for p in ports if "APC MINI" in p)
+        except StopIteration as e:
+            raise RuntimeError("APC Mini MIDI interface not found") from e
+
+    @staticmethod
+    def instantiate_plugin(fqn: str, name: str) -> AbstractAPCPlugin:
+        (path, clazz) = fqn.rsplit(".", maxsplit=1)
+        module = importlib.import_module(path)
+        plugin = getattr(module, clazz)
+        return plugin(name)
+
+    def run_plugins(self) -> None:
+        with mido.open_ioport(self.port) as midiport:
+            apc = APCMini(midiport)
+            multiplexer = APCMultiplexer(apc)
+
+            for fqn, name, areas in self.settings.PLUGINS:
+                plugin = self.instantiate_plugin(fqn, name)
+                multiplexer.register(areas, plugin)
+
+            self.wait_keyboard_interrupt()
+            multiplexer.shutdown()
+            apc.reset()
+
 
 if __name__ == "__main__":
-    run_plugins()
+    lp = LaunchPy(settings)
+    lp.run_plugins()

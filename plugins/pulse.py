@@ -23,6 +23,7 @@ from queue import SimpleQueue
 from time import time
 
 import pulsectl
+import settings
 from apc import APCMini, ButtonArea, ButtonID, ButtonState
 from multiplexer import AbstractAPCPlugin, APCMiniProxy
 from pulsectl.pulsectl import PulseIndexError
@@ -52,6 +53,17 @@ class Fader:
     def __str__(self) -> str:
         return f"Fader {self.index} -> {self.stream} ({self.channels}CH, {self.volume})"
 
+
+class PlacementMode(Enum):
+    # keep adding faders at the end of the deck, only fill gaps
+    # when no space at the end
+    APPEND = auto()
+    # insert fader at first free position at the beginning
+    FILL = auto()
+
+    # note that "beginning" = right and "end" = left unless you set
+    # sort_reverse below
+
 # Keeps track of the faders currently bound to Pulse streams and controls the order
 # in which faders are assigned. The fader below the SHIFT button is not used, since
 # it does not have the rectangular button column above it.
@@ -59,21 +71,9 @@ class Fader:
 # controlling your microphone volume.
 class FaderPool:
 
-    class AllocMode(Enum):
-        # keep adding faders at the end of the deck, only fill gaps
-        # when no space at the end
-        APPEND = auto()
-        # insert fader at first free position at the beginning
-        FILL = auto()
-
-        # note that "beginning" = right and "end" = left unless you set
-        # sort_reverse below
-
     def __init__(self) -> None:
-        # "False" will assign the faders right-to left (useful if you have the APC to the
-        # left of your keyboard)
-        self.sort_reverse = False
-        self.alloc_mode = self.AllocMode.FILL
+        self.sort_reverse = settings.PULSE_SORT_REVERSE
+        self.placement_mode = settings.PULSE_PLACEMENT_MODE
         
         if self.sort_reverse:
             self.free = SortedSet(range(APCMini.N_FADERS-1), key=neg)
@@ -113,7 +113,7 @@ class FaderPool:
         return fader
 
     def _get_next_free(self):
-        if self.alloc_mode == self.AllocMode.APPEND:
+        if self.placement_mode == PlacementMode.APPEND:
             step = 1 if self.sort_reverse else -1
             for i in self.used:
                 print(i)
@@ -125,7 +125,7 @@ class FaderPool:
                 next_index = 0 if self.sort_reverse else (APCMini.N_FADERS-2)
             self.free.remove(next_index)
             return next_index
-        elif self.alloc_mode == self.AllocMode.FILL:
+        elif self.placement_mode == PlacementMode.FILL:
             return self.free.pop()
 
         # you can override this to design custom fader selection logic
@@ -347,13 +347,13 @@ class EventLoop(threading.Thread):
     def __init__(self, event_queue: SimpleQueue, fader_pool: FaderPool, pulse: pulsectl.Pulse, physical_mixer: PhysicalMixer) -> None:
         super().__init__(name="PulseMixer event loop")
         self.sinks = []
-        self.sinks_muted = []
+        self.sinks_mute_flags = []
         self.mic_sources = []
         self.event_queue = event_queue
         self.fader_pool = fader_pool
         self.pulse = pulse
         self.physical_mixer = physical_mixer
-        self.physical_mixer.set_sinks(self.sinks_muted)
+        self.physical_mixer.set_sinks(self.sinks_mute_flags)
         self.reload_sinks()
         self.reload_mic()
 
@@ -385,8 +385,8 @@ class EventLoop(threading.Thread):
             sink_index = self.sinks.index(sink_id)
         except ValueError:
             return # we're not displaying that sink
-        self.sinks_muted[sink_index] = pulse_sink.mute
-        self.physical_mixer.set_sinks(self.sinks_muted)
+        self.sinks_mute_flags[sink_index] = pulse_sink.mute
+        self.physical_mixer.set_sinks(self.sinks_mute_flags)
         for fader in self.fader_pool.get_used_faders():
             self.physical_mixer.sync_buttons(fader, areas=self.physical_mixer.Area.SINK)
     
@@ -394,8 +394,8 @@ class EventLoop(threading.Thread):
         print("reloading sinks")
         pulse_sinks = sorted(self.pulse.sink_list(), key=lambda psi: psi.description)
         self.sinks = [s.index for s in pulse_sinks]
-        self.sinks_muted = [s.mute for s in pulse_sinks]
-        self.physical_mixer.set_sinks(self.sinks_muted)
+        self.sinks_mute_flags = [s.mute for s in pulse_sinks]
+        self.physical_mixer.set_sinks(self.sinks_mute_flags)
         for fader in self.fader_pool.get_used_faders():
             # HACK: Since in the fader we only save the sink index, i.e. the index into our
             # self.sinks, we need to update this by comparing the old and new sink lists.
@@ -624,6 +624,8 @@ class EventLoop(threading.Thread):
                 raise Exception("Invalid event type")
 
 class PulsePlugin(AbstractAPCPlugin):
+    areas = ButtonArea.HORIZONTAL | ButtonArea.MATRIX
+
     def __init__(self, name: str):
         super().__init__(name)
         self.registered = False
