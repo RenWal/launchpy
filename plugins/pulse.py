@@ -295,7 +295,7 @@ class PulseWatcher(threading.Thread):
     def run(self) -> None:
         with pulsectl.Pulse() as pulse:
             self.pulse = pulse
-            pulse.event_mask_set('sink_input', 'sink') 
+            pulse.event_mask_set('sink_input', 'sink', 'source') 
             pulse.event_callback_set(self._on_pulse_event)
             pulse.event_listen()
             self.pulse = None
@@ -305,16 +305,19 @@ class PulseWatcher(threading.Thread):
 # to the PhysicalMixer and to Pulse accordingly. Using the common event
 # queue, this serves as the central synchronization point.
 class EventLoop(threading.Thread):
+
     def __init__(self, event_queue: SimpleQueue, fader_pool: FaderPool, pulse: pulsectl.Pulse, physical_mixer: PhysicalMixer) -> None:
         super().__init__(name="PulseMixer event loop")
         self.sinks = []
         self.sinks_muted = []
+        self.mic_sources = []
         self.event_queue = event_queue
         self.fader_pool = fader_pool
         self.pulse = pulse
         self.physical_mixer = physical_mixer
         self.physical_mixer.set_sinks(self.sinks_muted)
         self.reload_sinks()
+        self.reload_mic()
 
     @staticmethod
     def _calc_volume(fader: Fader) -> list[float]:
@@ -364,6 +367,11 @@ class EventLoop(threading.Thread):
                 new_sink = None
             fader.sink = new_sink
             self.physical_mixer.sync_buttons(fader, areas=self.physical_mixer.Area.SINK)
+
+    def reload_mic(self) -> None:
+        print("reloading mic source")
+        pulse_sources = filter(lambda psi: psi.monitor_of_sink == 0xffffffff, self.pulse.source_list()) # without monitors
+        self.mic_sources = [s.index for s in pulse_sources]
     
     # TODO deduplicate all of the "if fader is None" stubs
 
@@ -430,15 +438,33 @@ class EventLoop(threading.Thread):
                 self.release_fader(e.index)
             elif e.t == pulsectl.PulseEventTypeEnum.change:
                 self.refresh_fader(e.index)
+        elif e.facility == pulsectl.PulseEventMaskEnum.source:
+            if e.t in [pulsectl.PulseEventTypeEnum.new, pulsectl.PulseEventTypeEnum.remove]:
+                self.reload_mic()
+                # force Pulse's stream volume to match the physical fader's position
+                volume = self.physical_mixer.get_fader_position(APCMini.N_FADERS-1)
+                self.update_volume(APCMini.N_FADERS-1, volume)
+
 
     def update_volume(self, fader_index: int, volume: float = None) -> None:
-        fader = self.fader_pool.at(fader_index)
-        if fader is None: # physical fader not mapped
-            return
-        if volume is not None:
-            fader.volume = volume
-        pulse_volume = self._make_volume_object(fader)
-        self.pulse.sink_input_volume_set(fader.stream, pulse_volume)
+        if fader_index == APCMini.N_FADERS-1: # rightmost fader is mic fader
+            vol = pulsectl.PulseVolumeInfo(volume, 1)
+            for s in self.mic_sources:
+                try:
+                    self.pulse.source_volume_set(s, vol)
+                except PulseIndexError:
+                    return
+        else:
+            fader = self.fader_pool.at(fader_index)
+            if fader is None: # physical fader not mapped
+                return
+            if volume is not None:
+                fader.volume = volume
+            pulse_volume = self._make_volume_object(fader)
+            try:
+                self.pulse.sink_input_volume_set(fader.stream, pulse_volume)
+            except pulsectl.PulseOperationFailed:
+                pass
 
     def toggle_mute(self, fader_index: int) -> None:
         fader = self.fader_pool.at(fader_index)
