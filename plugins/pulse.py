@@ -229,8 +229,8 @@ class PhysicalMixer:
         if areas & self.Area.BALANCE:
             blink = 1 if fader.volume_desync else 0 # adds 1 to the button state, which will cause the button to blink
             if fader.channels != 2:
-                self.apc_proxy.set_button(APCMini.MATRIX_OFFSET+fader.index, ButtonState.GREEN+blink)
-                self.apc_proxy.set_button(APCMini.MATRIX_OFFSET+fader.index+8, ButtonState.OFF)
+                self.apc_proxy.set_button(ButtonID(ButtonArea.MATRIX, fader.index), ButtonState.GREEN+blink)
+                self.apc_proxy.set_button(ButtonID(ButtonArea.MATRIX, fader.index+8), ButtonState.OFF)
             else:
                 bal = fader.balance
                 if bal == Balance.CENTER:
@@ -240,28 +240,29 @@ class PhysicalMixer:
                     if bal < 0:
                         colors = reversed(colors)
                 for i,c in enumerate(colors):
-                        self.apc_proxy.set_button(APCMini.MATRIX_OFFSET+fader.index+8*i, c+blink)
+                        self.apc_proxy.set_button(ButtonID(ButtonArea.MATRIX, fader.index+8*i), c+blink)
 
         if areas & self.Area.SINK:
             for i in range(min(self.MAX_SINK_BTNS, self.sink_count)):
                 btn_id = 8*(i+3)+fader.index # leave 3 rows at the bottom free
                 is_assigned = (i == fader.sink)
                 if is_assigned:
-                    self.apc_proxy.set_button(APCMini.MATRIX_OFFSET+btn_id, ButtonState.RED_BLINK if self.sink_mute_flags[i] else ButtonState.GREEN)
+                    state = ButtonState.RED_BLINK if self.sink_mute_flags[i] else ButtonState.GREEN
                 else:
-                    self.apc_proxy.set_button(APCMini.MATRIX_OFFSET+btn_id, ButtonState.RED if self.sink_mute_flags[i] else ButtonState.YELLOW)
+                    state = ButtonState.RED if self.sink_mute_flags[i] else ButtonState.YELLOW
+                self.apc_proxy.set_button(ButtonID(ButtonArea.MATRIX, btn_id), state)
             for i in range(self.sink_count, self.MAX_SINK_BTNS):
                 btn_id = 8*(i+3)+fader.index
-                self.apc_proxy.set_button(APCMini.MATRIX_OFFSET+btn_id, ButtonState.OFF)
+                self.apc_proxy.set_button(ButtonID(ButtonArea.MATRIX, btn_id), ButtonState.OFF)
                 
         if areas & self.Area.MUTE:
-            self.apc_proxy.set_button(APCMini.HORIZONTAL_OFFSET+fader.index, ButtonState.BLINK if fader.muted else ButtonState.ON)
+            self.apc_proxy.set_button(ButtonID(ButtonArea.HORIZONTAL, fader.index), ButtonState.BLINK if fader.muted else ButtonState.ON)
 
     def clear_buttons(self, fader: Fader) -> None:
         for i in range(8):
             btn_id = 8*i+fader.index
-            self.apc_proxy.set_button(APCMini.MATRIX_OFFSET+btn_id, ButtonState.OFF)
-        self.apc_proxy.set_button(APCMini.HORIZONTAL_OFFSET+fader.index, ButtonState.OFF)
+            self.apc_proxy.set_button(ButtonID(ButtonArea.MATRIX, btn_id), ButtonState.OFF)
+        self.apc_proxy.set_button(ButtonID(ButtonArea.HORIZONTAL, fader.index), ButtonState.OFF)
 
     ### hardware -> software ###
 
@@ -278,7 +279,7 @@ class PhysicalMixer:
         if btn.area == ButtonArea.MATRIX:
             (row, col) = divmod(btn.ordinal, 8)
             if row == 2: # 3rd lowest button in column
-                self.apc_proxy.set_button(APCMini.MATRIX_OFFSET+btn.ordinal, ButtonState.RED)
+                self.apc_proxy.set_button(btn, ButtonState.RED)
         elif btn.area == ButtonArea.HORIZONTAL:
             if self.remap_source is None:
                 self.remap_source = btn

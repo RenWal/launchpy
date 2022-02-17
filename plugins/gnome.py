@@ -46,6 +46,5 @@ class GnomeWorkspacePlugin(AbstractAPCPlugin):
         self.activate_workspace(btn.ordinal)
         if self.prev_workspace is not None:
             self.set_button(self.prev_workspace, ButtonState.OFF)
-        next_button_id = btn.ordinal+APCMini.VERTICAL_OFFSET
-        self.set_button(next_button_id, ButtonState.GREEN)
-        self.prev_workspace = next_button_id
+        self.set_button(btn, ButtonState.GREEN)
+        self.prev_workspace = btn

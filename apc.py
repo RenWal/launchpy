@@ -15,12 +15,16 @@
 
 from __future__ import annotations
 from enum import IntEnum, IntFlag
-from typing import Iterable
+from typing import Iterable, Tuple, Union
+
+from threading import Lock
 
 from mido import Message
 from mido.ports import IOPort
 
 
+# these are the the numerical values expected by the APC,
+# do not modify
 class ButtonState(IntEnum):
     OFF          = 0
     # for round buttons that have just one color
@@ -34,6 +38,24 @@ class ButtonState(IntEnum):
     YELLOW       = 5
     YELLOW_BLINK = 6
 
+    def toggle(self, color: ButtonState) -> ButtonState:
+        if self == self.OFF:
+            return color
+        return self.OFF
+
+    def blink(self, should_blink: bool) -> ButtonState:
+        if self == self.OFF:
+            return self.OFF
+        if self.value & 1 and should_blink:
+            return ButtonState(self.value+1)
+        if not (self.value & 1) and not should_blink:
+            return ButtonState(self.value-1)
+        return ButtonState(self)
+
+    @property
+    def blinking(self):
+        return not (self.value & 1) and not self == self.OFF
+
 class ButtonArea(IntFlag):
     MATRIX       = 0b0001
     HORIZONTAL   = 0b0010
@@ -45,59 +67,112 @@ class ButtonArea(IntFlag):
         return [area for area in cls if area & areas]
 
 class ButtonID:
-    def __init__(self, area: ButtonArea, ordinal: int):
+    def __init__(self, area: ButtonArea, ordinal: Union[int, Tuple[int, int]]):
         self.area = area
+        if isinstance(ordinal, tuple):
+            assert self.area == ButtonArea.MATRIX, "Coordinate notation only allowed for matrix buttons"
+            # matrix coords (column, row) to matrix index
+            ordinal = ordinal[1]*8 + ordinal[0]
         self.ordinal = ordinal
+
     def __eq__(self, o: object) -> bool:
         if not isinstance(o, self.__class__):
             return False
         return self.area == o.area and self.ordinal == o.ordinal
+
     def __hash__(self) -> int:
         return hash((self.area, self.ordinal))
+
+    def __repr__(self) -> str:
+        if self.area == ButtonArea.MATRIX:
+            col, row = self.matrix_coords
+            return f"{self.area.name}[{col},{row}]"
+        return f"{self.area.name}[{self.ordinal}]"
+    
+    @property
+    def matrix_coords(self):
+        if self.area != ButtonArea.MATRIX:
+            raise ValueError("Not a matrix button")
+        return divmod(self.ordinal, 8)
+
+    @classmethod
+    def from_idx(cls, idx: int):
+        if idx > APCMini.SHIFT_OFFSET:
+            return None
+        if idx == APCMini.SHIFT_OFFSET:
+            return cls(ButtonArea.SHIFT_BUTTON, 0)
+        if idx >= APCMini.VERTICAL_OFFSET:
+            return cls(ButtonArea.VERTICAL, idx - APCMini.VERTICAL_OFFSET)
+        if idx >= APCMini.HORIZONTAL_OFFSET:
+            return cls(ButtonArea.HORIZONTAL, idx - APCMini.HORIZONTAL_OFFSET)
+        if idx >= APCMini.MATRIX_OFFSET:
+            return cls(ButtonArea.MATRIX, idx - APCMini.MATRIX_OFFSET)
+        raise ValueError("Index invalid")
+
+    def to_idx(self) -> int:
+        if self.area == ButtonArea.SHIFT_BUTTON:
+            if self.ordinal != 0:
+                raise ValueError("Ordinal out of range")
+            return self.ordinal + APCMini.SHIFT_OFFSET
+        if self.area == ButtonArea.VERTICAL:
+            if self.ordinal not in range(APCMini.N_VERTICAL):
+                raise ValueError("Ordinal out of range")
+            return self.ordinal + APCMini.VERTICAL_OFFSET
+        if self.area == ButtonArea.HORIZONTAL:
+            if self.ordinal not in range(APCMini.N_HORIZONTAL):
+                raise ValueError("Ordinal out of range")
+            return self.ordinal + APCMini.HORIZONTAL_OFFSET
+        if self.area == ButtonArea.MATRIX:
+            if self.ordinal not in range(APCMini.N_MATRIX):
+                raise ValueError("Ordinal out of range")
+            return self.ordinal + APCMini.MATRIX_OFFSET
+        raise ValueError("Area invalid")
 
 class APCMini:
     FADER_OFFSET      = 48
     N_FADERS          = 9
     MATRIX_OFFSET     = 0
-    N_MATRIX          = 8*8
+    DIM_MATRIX        = 8
+    N_MATRIX          = DIM_MATRIX**2
     HORIZONTAL_OFFSET = 64
     N_HORIZONTAL      = 8
     VERTICAL_OFFSET   = 82
     N_VERTICAL        = 8
     SHIFT_OFFSET      = 98
 
-    button_matrix = list(range(MATRIX_OFFSET, MATRIX_OFFSET+N_MATRIX))
-    horizontal_buttons = list(range(HORIZONTAL_OFFSET, HORIZONTAL_OFFSET+N_HORIZONTAL))
-    vertical_buttons = list(range(VERTICAL_OFFSET, VERTICAL_OFFSET+N_VERTICAL))
+    button_matrix_indices = list(range(MATRIX_OFFSET, MATRIX_OFFSET+N_MATRIX))
+    horizontal_buttons_indices = list(range(HORIZONTAL_OFFSET, HORIZONTAL_OFFSET+N_HORIZONTAL))
+    vertical_buttons_indices = list(range(VERTICAL_OFFSET, VERTICAL_OFFSET+N_VERTICAL))
     shift_button = [SHIFT_OFFSET]
-    area_buttons = {
-        ButtonArea.MATRIX: button_matrix,
-        ButtonArea.HORIZONTAL: horizontal_buttons,
-        ButtonArea.VERTICAL: vertical_buttons,
+    area_button_indices = {
+        ButtonArea.MATRIX: button_matrix_indices,
+        ButtonArea.HORIZONTAL: horizontal_buttons_indices,
+        ButtonArea.VERTICAL: vertical_buttons_indices,
         ButtonArea.SHIFT_BUTTON: shift_button
     }
 
     def __init__(self, ioport: IOPort):
         self._ioport = ioport
 
-        self.light_state = {x:ButtonState.OFF for x in self.all_buttons}
+        self.light_state = {x:ButtonState.OFF for x in self.all_button_indices}
         self.faders = [None] * self.N_FADERS
 
         self.cb_button_pressed = None
         self.cb_button_released = None
         self.cb_fader_value = None
+        self.send_lock = Lock()
 
     @property
-    def all_buttons(self, only_with_light=False) -> Iterable[int]:
-        yield from self.button_matrix
-        yield from self.horizontal_buttons
-        yield from self.vertical_buttons
+    def all_button_indices(self, only_with_light: bool = False) -> Iterable[int]:
+        yield from self.button_matrix_indices
+        yield from self.horizontal_buttons_indices
+        yield from self.vertical_buttons_indices
         if not only_with_light:
             yield from self.shift_button
 
-    def reset(self) -> None:
-        for b in self.all_buttons:
-            self.set_button(b, ButtonState.OFF, force=True)
+    def reset(self, force: bool = False) -> None:
+        for b in self.all_button_indices:
+            self.set_button(b, ButtonState.OFF, force=force)
 
     def resync(self) -> None:
         # use this when the hardware was reset (this can happen when a
@@ -106,13 +181,20 @@ class APCMini:
         # what the software believes them to be showing
         self.set_all_buttons(self.light_state.items(), force=True)
     
-    def set_button(self, button: int, state: ButtonState, force: bool = False) -> None:
+    def set_button(self, button: Union[int, ButtonID], state: ButtonState, force: bool = False) -> None:
         # there seems to be some limitation, be it in mido/rtmidi or in
         # the APC mini itself, that drops MIDI messages coming at a very
         # high rate
+        if isinstance(button, ButtonID):
+            button = button.to_idx()
         if force or self.light_state[button] != state:
             self._send(Message('note_on', note=button, velocity=state))
         self.light_state[button] = state
+
+    def get_button(self, button: Union[int, ButtonID]) -> ButtonState:
+        if isinstance(button, ButtonID):
+            button = button.to_idx()
+        return self.light_state[button]
    
     def enable_events(self) -> None:
         self._ioport.input.callback = self._event_callback
@@ -124,30 +206,17 @@ class APCMini:
     def id_to_fader(cls, fader_id: int) -> int:
         return fader_id - cls.FADER_OFFSET
 
-    @classmethod
-    def id_to_button(cls, button_id) -> ButtonID:
-        if button_id > cls.SHIFT_OFFSET:
-            return None
-        if button_id == cls.SHIFT_OFFSET:
-            return ButtonID(ButtonArea.SHIFT_BUTTON, 0)
-        if button_id >= cls.VERTICAL_OFFSET:
-            return ButtonID(ButtonArea.VERTICAL, button_id - cls.VERTICAL_OFFSET)
-        if button_id >= cls.HORIZONTAL_OFFSET:
-            return ButtonID(ButtonArea.HORIZONTAL, button_id - cls.HORIZONTAL_OFFSET)
-        if button_id >= cls.MATRIX_OFFSET:
-            return ButtonID(ButtonArea.MATRIX, button_id - cls.MATRIX_OFFSET)
-        return None
-
     def _send(self, msg: Message):
-        self._ioport.send(msg)
+        with self.send_lock:
+            self._ioport.send(msg)
     
     def _event_callback(self, msg):
         if msg.type == "note_on":
             if callable(self.cb_button_pressed):
-                self.cb_button_pressed(self.id_to_button(msg.note))
+                self.cb_button_pressed(ButtonID.from_idx(msg.note))
         elif msg.type == "note_off":
             if callable(self.cb_button_released):
-                self.cb_button_released(self.id_to_button(msg.note))
+                self.cb_button_released(ButtonID.from_idx(msg.note))
         elif msg.type == "control_change":
             fader_id = self.id_to_fader(msg.control)
             float_val = msg.value/127
@@ -158,11 +227,11 @@ class APCMini:
             assert 0
 
     def get_area_light_state(self, area: ButtonArea) -> dict[int, ButtonState]:
-        return { b:self.light_state[b] for b in self.get_area_buttons(area) }
+        return { b:self.get_button(b) for b in self.get_area_buttons(area) }
 
     @classmethod
     def get_area_buttons(cls, area: ButtonArea) -> list[int]:
-        return cls.area_buttons[area]
+        return cls.area_button_indices[area]
 
     def set_all_buttons(self, btn_map: Iterable, force: bool = False):
         for b,s in btn_map:

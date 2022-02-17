@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from collections import deque
 from threading import RLock
+from typing import Union
 
 from apc import APCMini, ButtonArea, ButtonID, ButtonState
 
@@ -67,12 +68,19 @@ class APCMiniProxy:
         faders = apc.faders if (areas & ButtonArea.HORIZONTAL) else None
         return cls(apc, areas, states, faders)
 
-    def set_button(self, buttonID: int, state: ButtonState) -> None:
-        area = APCMini.id_to_button(buttonID).area
-        assert area & self.areas, "Plugin attempted to write to non-registered button"
-        self.light_map[area][buttonID] = state
-        if self.is_area_enabled(area):
+    def set_button(self, buttonID: Union[int, ButtonID], state: ButtonState) -> None:
+        if isinstance(buttonID, int):
+            buttonID = ButtonID.from_idx(buttonID)
+        assert buttonID.area & self.areas, "Plugin attempted to write to non-registered button"
+        self.light_map[buttonID.area][buttonID.to_idx()] = state
+        if self.is_area_enabled(buttonID.area):
             self.host.set_button(buttonID, state)
+
+    def get_button(self, buttonID: Union[int, ButtonID]) -> ButtonState:
+        if isinstance(buttonID, int):
+            buttonID = ButtonID.from_idx(buttonID)
+        assert buttonID.area & self.areas, "Plugin attempted to read from non-registered button"
+        return self.light_map[buttonID.area][buttonID.to_idx()]
 
     def enable_areas(self, areas: ButtonArea) -> None:
         assert (self.areas & areas) == areas, "Attempted to enable non-registered area"
@@ -98,9 +106,11 @@ class AbstractAPCPlugin:
     def __repr__(self) -> str:
         return self.name
 
-    # convenience method
-    def set_button(self, buttonID: int, state: ButtonState) -> None:
+    # convenience methods
+    def set_button(self, buttonID: Union[int, ButtonID], state: ButtonState) -> None:
         self.apc_proxy.set_button(buttonID, state)
+    def get_button(self, buttonID: Union[int, ButtonID]) -> ButtonState:
+        return self.apc_proxy.get_button(buttonID)
 
     def on_register(self, apc_proxy: APCMiniProxy) -> None:
         self.apc_proxy = apc_proxy
@@ -178,6 +188,8 @@ class APCMultiplexer:
         if superfluous_areas:
             names = ' '.join([a.name for a in ButtonArea.split_flags(superfluous_areas)])
             print(f"WARNING: Asked for areas {names} which are not provided by plugin {plugin.name}")
+            # ensure we only enable areas that the plugin can handle
+            areas &= plugin.areas
 
         with self.plugin_lock:
             self._create_plugin_data(plugin, areas)
@@ -219,6 +231,20 @@ class APCMultiplexer:
         self.plugin_proxies.pop(plugin)
         self.plugin_areas.pop(plugin)
 
+    def blank(self, do_blank) -> None:
+        with self.plugin_lock:
+            if do_blank:
+                for area, plugins in self.area_plugins.items():
+                    if plugins:
+                        active_plugin = plugins[0]
+                        self._disable_plugin_area(area, active_plugin)
+                self.apc.reset(force=False)
+            else:
+                for area, plugins in self.area_plugins.items():
+                    if plugins:
+                        active_plugin = plugins[0]
+                        self._enable_plugin_area(area, active_plugin)
+
     def next_scene(self, area: ButtonArea) -> None:
         with self.plugin_lock:
             area_plugins = self.area_plugins[area]
@@ -229,7 +255,7 @@ class APCMultiplexer:
                 self.area_plugins[area].rotate(1)
                 next_plugin = area_plugins[0]
                 self._enable_plugin_area(area, next_plugin)
-                print("Activated", next_plugin)
+                print("Activated", next_plugin, "on area", area.name)
 
     def _disable_plugin_area(self, area, plugin):
         plugin.on_deactivate(area)
