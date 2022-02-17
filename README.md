@@ -26,9 +26,9 @@ Again, the three zones are treated individually. In my use case, I can switch th
 ### The plugins
 
 #### Demo Plugin
-For an overview, have a look at `plugins/demo.py`. This shows you all that's needed to create a simple plugin: You override the `on_register` and `on_unregister` callbacks so that you receive access to your plugin's APCMiniProxy instance and to perform any cleanup that might be needed when your plugin is removed. Then, use the `on_btn_press` and `on_btn_release` callbacks to react to buttons, and `on_fader_change` to react to fader movement. To control the button lights, call `set_btn`.
+This plugin lets you play around with the lights on the APC buttons. If you want to write your own plugins, this is also the place to get you started. The plugin's code at `plugins/demo.py` contains a tutorial that explains the plugin API and some details of the capabilities of the APC.
 
-If you want to dig deeper, look at the methods that AbstractAPCPlugin provides. If you need to access the current fader positions, use `self.apc_proxy.faders`.
+If you want to dig deeper, look at the methods that `AbstractAPCPlugin` provides.
 
 #### Gnome Workspace Plugin
 This is a simple plugin that uses Gnome's DBus interface to switch between different workspaces using the vertical buttons on the APC. It doesn't currently update the lights on the APC though if you switch the workspace directly in Gnome. Any ideas on how to do this are welcome!
