@@ -297,6 +297,7 @@ class PhysicalMixer:
                 self._submit(self.MixerEvent(self.MixerEventType.FADER_BALANCE, col, value=direction))
             elif row == 2: # eject button (3rd lowest button in column)
                 self._submit(self.MixerEvent(self.MixerEventType.FADER_EJECT, col))
+                self.apc_proxy.set_button(btn, ButtonState.OFF)
             elif row >= 3: # sink select buttons (topmost 5 buttons in column)
                 sink = row-3
                 if sink > self.sink_count-1:
