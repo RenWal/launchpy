@@ -170,7 +170,7 @@ class APCMini:
         if not only_with_light:
             yield from self.shift_button
 
-    def reset(self, force: bool = False) -> None:
+    def reset(self, force: bool = True) -> None:
         for b in self.all_button_indices:
             self.set_button(b, ButtonState.OFF, force=force)
 
