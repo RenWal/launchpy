@@ -1,0 +1,13 @@
+[Unit]
+Description=Akai APC Mini userspace driver
+# comment this in if you use the pulse plugin
+#After=pulseaudio.service
+
+[Service]
+Type=simple
+StandardOutput=journal
+WorkingDirectory=<path-to-launchpy-repository>
+ExecStart=<path-to-launchpy-repository>/service/service.sh
+
+[Install]
+WantedBy=default.target

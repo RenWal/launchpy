@@ -10,7 +10,7 @@ APC_PORT = None
 PLUGINS = [
     ("plugins.pulse.PulsePlugin", "Pulse mixer", ButtonArea.MATRIX | ButtonArea.HORIZONTAL),
     ("plugins.gnome.GnomeWorkspacePlugin", "Gnome workspace switcher", ButtonArea.VERTICAL),
-    ("plugins.demo.DemoPlugin", "Demo plugin", ButtonArea.MATRIX | ButtonArea.HORIZONTAL),
+    #("plugins.demo.DemoPlugin", "Demo plugin", ButtonArea.MATRIX | ButtonArea.HORIZONTAL),
 ]
 
 # "False" will assign the faders right-to left (useful if you have the APC to the

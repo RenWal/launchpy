@@ -1,6 +1,7 @@
 # Install
 ```sh
 git clone git@github.com:RenWal/launchpy.git
+cd launchpy
 # set up virtual environment
 python3 -m venv env
 source env/bin/activate
@@ -21,3 +22,19 @@ there are two plugins `PulsePlugin` and `GnomeWorkspacePlugin`. There is also
 a demo plugin that you can use to play around with the APC and test if all
 your buttons are working. If you want do disable any plugin, just comment its
 entry out.
+
+# Run
+Just execute `./launch.py` in your virtual environment.
+
+# As a `systemd` service
+If you wish, you can schedule LaunchPy to run as a user service on `systemd`.
+Create the directory `~/.config/systemd/user`, copy `service/launchpy.service`
+from this repository to that directory and update the paths at the marked spots
+in this service file.
+
+You can then enable and start the service:
+```sh
+systemctl --user daemon-reload
+systemctl --user enable launchpy.service
+systemctl --user start launchpy.service
+```
