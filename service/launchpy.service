@@ -6,7 +6,7 @@ Description=Akai APC Mini userspace driver
 [Service]
 Type=simple
 StandardOutput=journal
-WorkingDirectory=<path-to-launchpy-repository>
+WorkingDirectory=<path-to-launchpy-repository>/service/
 ExecStart=<path-to-launchpy-repository>/service/service.sh
 
 [Install]
