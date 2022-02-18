@@ -4,6 +4,11 @@ Some python stuff to interface with the Akai APC mini launchpad, and some plugin
 ## What's this?
 The APC mini is actually a controller for the Ableton Live software. However, I reckon it can be used for many more things. Unfortunately, I could not yet find a nice abstraction layer that gives me object-oriented access to the device and plugin support, rather than manually interacting with raw MIDI ports. This repo is a work in progress on filling that gap.
 
+## I just want to run your plugins!
+Head over to [INSTALL.md](./INSTALL.md) and follow the instructions. That will get you set up with LaunchPy and all the default plugins.
+
+If you want to develop your own stuff or you're simply curious about the details of this implementation, keep reading here.
+
 ## How does this thing work?
 There are multiple abstraction layers in this toolset. Which one you use depends on the complexity of your project.
 
