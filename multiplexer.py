@@ -177,7 +177,7 @@ class APCMultiplexer:
         self.plugin_areas: dict[AbstractAPCPlugin, ButtonArea] = dict()
 
         apc.disable_events()
-        apc.reset()
+        apc.reset(force=True)
         apc.cb_button_pressed = self._on_btn_press
         apc.cb_button_released = self._on_btn_release
         apc.cb_fader_value = self._on_fader_change
