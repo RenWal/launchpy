@@ -1,5 +1,5 @@
 # launchpy, a Python binding and plugins for the Akai APC mini launchpad
-# Copyright (C) 2022 RenWal
+# Copyright (C) 2023 RenWal
 # 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,19 +15,22 @@
 
 from __future__ import annotations
 
+import re
 import threading
 import traceback
 from enum import Enum, IntEnum, IntFlag, auto
 from operator import neg
 from queue import SimpleQueue
 from time import time
+from typing import Iterable, Union
 
 import pulsectl
+from pulsectl.pulsectl import PulseIndexError
+from sortedcontainers import SortedDict, SortedSet
+
 import settings
 from apc import APCMini, ButtonArea, ButtonID, ButtonState
 from multiplexer import AbstractAPCPlugin, APCMiniProxy
-from pulsectl.pulsectl import PulseIndexError
-from sortedcontainers import SortedDict, SortedSet
 
 
 class Balance(IntEnum):
@@ -377,6 +380,19 @@ class EventLoop(threading.Thread):
     def _make_volume_object(cls, fader: Fader) -> pulsectl.PulseVolumeInfo:
         vals = cls._calc_volume(fader)
         return pulsectl.PulseVolumeInfo(vals, 1)
+    
+    @staticmethod
+    def _match_pattern(instance: str, patterns: Iterable[Union[str, re.Pattern]]) -> bool:
+        if instance is None:
+            return False
+        for pat in patterns:
+            if isinstance(pat, re.Pattern):
+                if pat.fullmatch(instance):
+                    return True
+            else:
+                if pat == instance:
+                    return True
+        return False
 
     def reload_sink_mute(self, sink_id: int) -> None:
         try:
@@ -395,8 +411,9 @@ class EventLoop(threading.Thread):
     def reload_sinks(self) -> None:
         print("reloading sinks")
         pulse_sinks = sorted(self.pulse.sink_list(), key=lambda psi: psi.description)
-        self.sinks = [s.index for s in pulse_sinks]
-        self.sinks_mute_flags = [s.mute for s in pulse_sinks]
+        pulse_sinks_filtered = [s for s in pulse_sinks if not self._match_pattern(s.description, settings.PULSE_IGNORE_SINKS)]
+        self.sinks = [s.index for s in pulse_sinks_filtered]
+        self.sinks_mute_flags = [s.mute for s in pulse_sinks_filtered]
         self.physical_mixer.set_sinks(self.sinks_mute_flags)
         for fader in self.fader_pool.get_used_faders():
             # HACK: Since in the fader we only save the sink index, i.e. the index into our
@@ -420,6 +437,9 @@ class EventLoop(threading.Thread):
             input_info = self.pulse.sink_input_info(stream_index)
         except pulsectl.PulseIndexError:
             return # rare case where stream is gone before we get to process it
+        input_name = input_info.proplist.get("application.name")
+        if self._match_pattern(input_name, settings.PULSE_IGNORE_STREAMS):
+            return
         sink_index = self.sinks.index(input_info.sink)
         fader = self.fader_pool.acquire(stream_index, sink_index, input_info.sink, \
             input_info.channel_count, input_info.mute)
