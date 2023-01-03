@@ -8,6 +8,11 @@ import re
 # APC_PORT = "APC MINI:APC MINI MIDI 1 20:0"
 APC_PORT = None
 
+# will connect to systemd-logind via DBus and turn off the APC before
+# the system enters standby; requires dbus_next to be installed via pip
+# and will not work on non-systemd distros
+ENABLE_STANDBY_SUPPORT = True
+
 PLUGINS = [
     ("plugins.pulse.PulsePlugin", "Pulse mixer", ButtonArea.MATRIX | ButtonArea.HORIZONTAL),
     ("plugins.gnome.GnomeWorkspacePlugin", "Gnome workspace switcher", ButtonArea.VERTICAL),

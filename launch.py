@@ -17,28 +17,25 @@
 
 from __future__ import annotations
 
+import asyncio
 import importlib
 from time import sleep
 
 import mido
+from mido.ports import IOPort
 
 import settings
 from apc import APCMini
-from multiplexer import APCMultiplexer, AbstractAPCPlugin
+from multiplexer import AbstractAPCPlugin, APCMultiplexer
+from powerevents import PowerMonitor
+
+
 
 class LaunchPy:
 
     def __init__(self, settings: settings) -> None:
         self.settings = settings
-        self.port = self.settings.APC_PORT or self.autodiscover_port()
-
-    @staticmethod
-    def wait_keyboard_interrupt() -> None:
-        try:
-            while 1:
-                sleep(1)
-        except KeyboardInterrupt:
-            pass
+        self.portname: str = self.settings.APC_PORT or self.autodiscover_port()
 
     @staticmethod
     def autodiscover_port() -> str:
@@ -54,21 +51,53 @@ class LaunchPy:
         module = importlib.import_module(path)
         plugin = getattr(module, clazz)
         return plugin(name)
+    
+    def run(self) -> None:
+        print("LaunchPy starting")
+        loop = asyncio.get_event_loop()
+        try:
+            asyncio.ensure_future(self.mainloop(), loop=loop)
+            # waits for keyboard interrupt; don't replace this with a simple sleep()
+            # since the PowerMonitor uses asyncio to listen to the system message bus
+            loop.run_forever()
+        except KeyboardInterrupt:
+            pass
+        loop.run_until_complete(self.cleanup())
+        print("LaunchPy shutdown")
 
-    def run_plugins(self) -> None:
-        with mido.open_ioport(self.port) as midiport:
-            apc = APCMini(midiport)
-            multiplexer = APCMultiplexer(apc)
+    async def mainloop(self) -> None:
+        self.port = mido.open_ioport(self.portname)
+        self.apc = APCMini(self.port)
+        self.multiplexer = APCMultiplexer(self.apc)
 
-            for fqn, name, areas in self.settings.PLUGINS:
-                plugin = self.instantiate_plugin(fqn, name)
-                multiplexer.register(areas, plugin)
+        print("Initializing plugins")
+        for fqn, name, areas in self.settings.PLUGINS:
+            plugin = self.instantiate_plugin(fqn, name)
+            self.multiplexer.register(areas, plugin)
+        print("All plugins loaded")
 
-            self.wait_keyboard_interrupt()
-            multiplexer.shutdown()
-            apc.reset()
+        if settings.ENABLE_STANDBY_SUPPORT:
+            # blank APC when system goes to sleep, unblank on resume
+            async def before_sleep():
+                print("blanking before sleep")
+                self.multiplexer.blank(True)
+            async def after_wakeup():
+                print("blanking unblanking after wakeup")
+                self.multiplexer.blank(False)
+            
+            # power monitor will connect to systemd-logind and trigger the
+            # two callbacks specified above as necessary
+            self.power_monitor = PowerMonitor(before_sleep, after_wakeup)
+            await self.power_monitor.enable()
+            print("Standby-aware mode enabled")
 
+    async def cleanup(self):
+        if settings.ENABLE_STANDBY_SUPPORT:
+            await self.power_monitor.disable()
+        self.multiplexer.shutdown()
+        self.apc.reset()
+        self.port.close()
 
 if __name__ == "__main__":
     lp = LaunchPy(settings)
-    lp.run_plugins()
+    lp.run()

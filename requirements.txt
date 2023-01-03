@@ -1,2 +1,3 @@
+dbus_next
 mido
 python-rtmidi --install-option="--no-jack"
