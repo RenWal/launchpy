@@ -28,6 +28,12 @@ PULSE_SORT_REVERSE = False
 
 PULSE_PLACEMENT_MODE = PlacementMode.FILL
 
+# Normally, mute buttons are lit when unmuted and flashing when muted.
+# If that annoys you, you can toggle them to being off when unmuted and
+# lit when muted here (this mode more closely reflects the interface of
+# other commercial mixers).
+PULSE_MUTE_BUTTONS_FLASHING = True
+
 # ignore-lists for sinks, and application names of sink inputs
 # (entries can be strings or compiled regex patterns)
 PULSE_IGNORE_SINKS = [
