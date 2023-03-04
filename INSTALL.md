@@ -1,3 +1,6 @@
+# Prerequisites
+Prior to installation, please install the [dependencies](https://spotlightkid.github.io/python-rtmidi/installation.html#linux) needed to compile python-rtmidi (which is part of the `requirements.txt`).
+
 # Install
 ```sh
 git clone git@github.com:RenWal/launchpy.git
