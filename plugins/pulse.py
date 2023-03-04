@@ -262,7 +262,11 @@ class PhysicalMixer:
                 self.apc_proxy.set_button(ButtonID(ButtonArea.MATRIX, btn_id), ButtonState.OFF)
                 
         if areas & self.Area.MUTE:
-            self.apc_proxy.set_button(ButtonID(ButtonArea.HORIZONTAL, fader.index), ButtonState.BLINK if fader.muted else ButtonState.ON)
+            if fader.muted:
+                state = ButtonState.BLINK if settings.PULSE_MUTE_BUTTONS_FLASHING else ButtonState.ON
+            else:
+                state = ButtonState.ON if settings.PULSE_MUTE_BUTTONS_FLASHING else ButtonState.OFF
+            self.apc_proxy.set_button(ButtonID(ButtonArea.HORIZONTAL, fader.index), state)
 
     def clear_buttons(self, fader: Fader) -> None:
         for i in range(8):
