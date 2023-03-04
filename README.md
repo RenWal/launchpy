@@ -60,10 +60,6 @@ Finally, there is one "secret button": In each column, the third rectangular but
 ## Why did you make this?
 I found myself stuck at home and figured that my home office setup just hasn't got enough macro keys. Also, physical volume sliders for PulseAudio are pretty nice, so I can switch between video calls more swiftly when I need to attend more than one call at once. (Just things that tend to happen when you develop online seminar software …)
 
-## TODOs
-- Find out how to read the fader positions on startup. Right now you need to wiggle each slider such that launchpy learns its value through MIDI events. That's a little annoying. (_If anyone knows and wants to share the exact protocol in use here -- Ableton seems to be sending some proprietary messages -- I'd be very happy to hear from you_)
-
-(This is strictly a hobby / free time project. Stuff will happen as I find time for it.)
 
 ## Where do I find more details on the APC?
 Here's a chart of the button mapping:
