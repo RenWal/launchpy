@@ -194,6 +194,17 @@ class APCMini:
 
         self._handshake()
     
+    # Experimental method to swap out the underlying port,
+    # can be used to reconnect after the underlying MIDI port
+    # was closed (USB reset during sleep, etc.).
+    # It's up to the caller to ensure you connect back to the
+    # correct device!
+    def reset_port(self, ioport: IOPort):
+        old_cb = self._ioport.input.callback
+        with self.send_lock:
+            self._ioport = ioport
+            self._ioport.input.callback = old_cb
+    
     def _handshake(self):
         # suspend callbacks
         old_cb = self._ioport.input.callback
@@ -261,6 +272,7 @@ class APCMini:
         # power down during sleep) to bring the LEDs back in sync with
         # what the software believes them to be showing
         self.set_all_buttons(self.light_state.items(), force=True)
+        # TODO we might want to re-query the fader states here
     
     def set_button(self, button: Union[int, ButtonID], state: ButtonState, force: bool = False) -> None:
         # there seems to be some limitation, be it in mido/rtmidi or in
