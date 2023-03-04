@@ -146,6 +146,9 @@ class FaderPool:
     def is_used(self, fader_index: int) -> bool:
         return fader_index in self.used
 
+    def is_stream_mapped(self, stream_index: int) -> bool:
+        return stream_index in self.stream_map
+
     def swap(self, source_index: int, target_index: int) -> None:
         source_fader = self.at(source_index)
         target_fader = self.at(target_index)
@@ -360,6 +363,7 @@ class EventLoop(threading.Thread):
         self.physical_mixer = physical_mixer
         self.physical_mixer.set_sinks(self.sinks_mute_flags)
         self.reload_sinks()
+        self.reload_streams()
         self.reload_mic()
 
     @staticmethod
@@ -424,6 +428,31 @@ class EventLoop(threading.Thread):
                 new_sink = None
             fader.sink = new_sink
             self.physical_mixer.sync_buttons(fader, areas=self.physical_mixer.Area.SINK)
+
+    def reload_streams(self) -> None:
+        print("reloading streams")
+        # TODO this directly gives the PulseSinkInputInfo objects, we then just
+        # use the index from them, and let the refresh_fader, etc. methods
+        # fetch the PulseSinkInputInfo again, which is inefficient (It's done this way
+        # since in all other cases where we need to call these methods, we really do
+        # just have the index.)
+        pulse_streams = self.pulse.sink_input_list()
+        unseen_streams = set(self.fader_pool.stream_map.keys())
+        for stream in pulse_streams:
+            input_name = stream.proplist.get("application.name")
+            if self._match_pattern(input_name, settings.PULSE_IGNORE_STREAMS):
+                continue
+            idx = stream.index
+
+            unseen_streams.discard(idx)
+            if self.fader_pool.is_stream_mapped(idx):
+                self.refresh_fader(idx)
+            else:
+                self.bind_fader(idx)
+
+        for idx in unseen_streams:
+            self.release_fader(idx)
+
 
     def reload_mic(self) -> None:
         print("reloading mic source")
