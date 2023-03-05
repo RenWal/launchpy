@@ -17,6 +17,7 @@ PLUGINS = [
     ("plugins.pulse.PulsePlugin", "Pulse mixer", ButtonArea.MATRIX | ButtonArea.HORIZONTAL),
     ("plugins.gnome.GnomeWorkspacePlugin", "Gnome workspace switcher", ButtonArea.VERTICAL),
     #("plugins.demo.DemoPlugin", "Demo plugin", ButtonArea.MATRIX | ButtonArea.HORIZONTAL),
+    ("plugins.midi_passthrough.MidiPassthroughPlugin", "APC Virtual MIDI Plugin", ButtonArea.MATRIX | ButtonArea.HORIZONTAL | ButtonArea.VERTICAL),
 ]
 
 # "False" will assign the faders right-to left (useful if you have the APC to the

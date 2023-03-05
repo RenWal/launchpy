@@ -97,8 +97,8 @@ class ButtonID:
 
     @classmethod
     def from_idx(cls, idx: int):
-        if idx > APCMini.SHIFT_OFFSET:
-            return None
+        if not cls.idx_valid(idx):
+            raise ValueError("Index invalid")
         if idx == APCMini.SHIFT_OFFSET:
             return cls(ButtonArea.SHIFT_BUTTON, 0)
         if idx >= APCMini.VERTICAL_OFFSET:
@@ -107,7 +107,8 @@ class ButtonID:
             return cls(ButtonArea.HORIZONTAL, idx - APCMini.HORIZONTAL_OFFSET)
         if idx >= APCMini.MATRIX_OFFSET:
             return cls(ButtonArea.MATRIX, idx - APCMini.MATRIX_OFFSET)
-        raise ValueError("Index invalid")
+        # we must never reach this, unless idx_valid() is broken
+        assert False
 
     def to_idx(self) -> int:
         if self.area == ButtonArea.SHIFT_BUTTON:
@@ -127,6 +128,10 @@ class ButtonID:
                 raise ValueError("Ordinal out of range")
             return self.ordinal + APCMini.MATRIX_OFFSET
         raise ValueError("Area invalid")
+    
+    @staticmethod
+    def idx_valid(idx) -> bool:
+        return idx in range(APCMini.MATRIX_OFFSET, APCMini.SHIFT_OFFSET+1)
 
 class APCMini:
     FADER_OFFSET      = 48
@@ -205,6 +210,10 @@ class APCMini:
     @classmethod
     def id_to_fader(cls, fader_id: int) -> int:
         return fader_id - cls.FADER_OFFSET
+    
+    @classmethod
+    def fader_to_id(cls, fader_id: int) -> int:
+        return fader_id + cls.FADER_OFFSET
 
     def _send(self, msg: Message):
         with self.send_lock:
