@@ -68,7 +68,7 @@ class MidiPassthroughPlugin(AbstractAPCPlugin):
     def handle_message(self, msg):
         if msg.type == "note_on":
             btn_idx = msg.note
-            if ButtonID.idx_valid(btn_idx):
+            if ButtonID.idx_valid(btn_idx, lightable_only=True):
                 state = msg.velocity
                 self.set_button(btn_idx, state)
             else:

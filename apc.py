@@ -130,8 +130,16 @@ class ButtonID:
         raise ValueError("Area invalid")
     
     @staticmethod
-    def idx_valid(idx) -> bool:
-        return idx in range(APCMini.MATRIX_OFFSET, APCMini.SHIFT_OFFSET+1)
+    def idx_valid(idx, lightable_only: bool = False) -> bool:
+        if idx in range(APCMini.MATRIX_OFFSET, APCMini.MATRIX_OFFSET+APCMini.N_MATRIX):
+            return True
+        if idx in range(APCMini.HORIZONTAL_OFFSET, APCMini.HORIZONTAL_OFFSET+APCMini.N_HORIZONTAL):
+            return True
+        if idx in range(APCMini.VERTICAL_OFFSET, APCMini.VERTICAL_OFFSET+APCMini.N_VERTICAL):
+            return True
+        if idx == APCMini.SHIFT_OFFSET and not lightable_only:
+            return True
+        return False
 
 class APCMini:
     FADER_OFFSET      = 48
