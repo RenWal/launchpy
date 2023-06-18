@@ -13,6 +13,9 @@ APC_PORT = None
 # and will not work on non-systemd distros
 ENABLE_STANDBY_SUPPORT = True
 
+# allows re-opening the MIDI port when receiving SIGHUP
+ALLOW_RELOAD = True
+
 PLUGINS = [
     ("plugins.pulse.PulsePlugin", "Pulse mixer", ButtonArea.MATRIX | ButtonArea.HORIZONTAL),
     ("plugins.gnome.GnomeWorkspacePlugin", "Gnome workspace switcher", ButtonArea.VERTICAL),
