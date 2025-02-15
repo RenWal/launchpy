@@ -94,7 +94,7 @@ class ButtonID:
     def matrix_coords(self):
         if self.area != ButtonArea.MATRIX:
             raise ValueError("Not a matrix button")
-        return divmod(self.ordinal, 8)
+        return divmod(self.ordinal, 8)[::-1]
 
     @classmethod
     def from_idx(cls, idx: int):
